@@ -3,6 +3,7 @@ package com.example.memegeneratorapp.presentation.ui
 import android.graphics.ImageDecoder
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -29,8 +30,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -39,6 +43,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
@@ -53,6 +59,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -66,8 +73,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.memegeneratorapp.domain.model.MemeText
+import com.example.memegeneratorapp.presentation.utils.createMemeBitmap
+import com.example.memegeneratorapp.presentation.utils.saveBitmapToPictures
+import com.example.memegeneratorapp.presentation.utils.shareImageUri
 import com.example.memegeneratorapp.presentation.viewmodel.MemeViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 @AndroidEntryPoint
@@ -87,18 +101,27 @@ fun MemeEditorScreen(viewModel: MemeViewModel = hiltViewModel()) {
     val context = LocalContext.current
     var showTextDialog by remember { mutableStateOf(false) }
     var inputText by remember { mutableStateOf("") }
+    var drawOffsetX by remember { mutableStateOf(0f) }
+    var drawOffsetY by remember { mutableStateOf(0f) }
+    var scaledWidth by remember { mutableStateOf(0f) }
+    var scaledHeight by remember { mutableStateOf(0f) }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
+
     ) { uri ->
         uri?.let {
             val source = ImageDecoder.createSource(context.contentResolver, uri)
-            val bitmap = ImageDecoder.decodeBitmap(source).asImageBitmap()
-            viewModel.onImageSelected(uri, bitmap)
+            val bitmap = ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                decoder.isMutableRequired = true
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+            viewModel.onImageSelected(uri, bitmap.asImageBitmap())
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        var isSaving by remember { mutableStateOf(false) } // Loader state
 
         Canvas(
             modifier = Modifier
@@ -111,21 +134,16 @@ fun MemeEditorScreen(viewModel: MemeViewModel = hiltViewModel()) {
                 val imageHeight = bitmap.height.toFloat()
 
                 val scale: Float
-                val drawOffsetX: Float
-                val drawOffsetY: Float
 
-                if (imageWidth / imageHeight > canvasWidth / canvasHeight) {
-                    // Image is wider than canvas; crop horizontally
-                    scale = canvasHeight / imageHeight
-                } else {
-                    // Image is taller than canvas; crop vertically or aspect ratios are equal
-                    scale = canvasWidth / imageWidth
-                }
+                // Calculate scale to fit within the bounds while maintaining aspect ratio
+                val widthScale = canvasWidth / imageWidth
+                val heightScale = canvasHeight / imageHeight
+                scale = minOf(widthScale, heightScale) // Use the smaller scale to fit
 
-                val scaledWidth = imageWidth * scale
-                val scaledHeight = imageHeight * scale
-                drawOffsetX = (canvasWidth - scaledWidth) / 2f
-                drawOffsetY = (canvasHeight - scaledHeight) / 2f
+                scaledWidth = imageWidth * scale
+                scaledHeight = imageHeight * scale
+                drawOffsetX = (canvasWidth - scaledWidth) / 2f // Center horizontally
+                drawOffsetY = (canvasHeight - scaledHeight) / 2f // Center vertically
                 val topLeft = IntOffset(Math.round(drawOffsetX), Math.round(drawOffsetY))
                 drawImage(
                     image = bitmap,
@@ -140,11 +158,15 @@ fun MemeEditorScreen(viewModel: MemeViewModel = hiltViewModel()) {
                     filterQuality = FilterQuality.Low
                 )
             }
-
         }
+
+        val imageOffset = Offset(drawOffsetX, drawOffsetY)
+        val imageSize = Size(scaledWidth, scaledHeight)
         viewModel.memeTexts.forEachIndexed { index, memeText ->
             DraggableMemeText(
                 memeText = memeText,
+                imageOffset = imageOffset,
+                imageSize = imageSize,
                 onPositionChange = { newOffset ->
                     viewModel.updateTextPosition(index, newOffset)
                 }
@@ -167,6 +189,57 @@ fun MemeEditorScreen(viewModel: MemeViewModel = hiltViewModel()) {
                 Icon(Icons.Default.Add, contentDescription = "Add Text")
             }
 
+            // Save
+            FloatingActionButton(onClick = {
+                viewModel.imageBitmap?.let { imageBitmap ->
+                    isSaving = true
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val bitmap = createMemeBitmap(imageBitmap, viewModel.memeTexts, context)
+                        val uri = saveBitmapToPictures(context, bitmap)
+                        withContext(Dispatchers.Main) {
+                            isSaving = false
+                            if (uri != null) {
+                                Toast.makeText(context, "Saved to Pictures", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Failed to save", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+            }) {
+                Icon(Icons.Default.ArrowForward, contentDescription = "Save Meme")
+            }
+
+            // Share
+            FloatingActionButton(onClick = {
+                viewModel.imageBitmap?.let { imageBitmap ->
+                    isSaving = true
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val bitmap = createMemeBitmap(imageBitmap, viewModel.memeTexts, context)
+                        val uri = saveBitmapToPictures(context, bitmap)
+                        withContext(Dispatchers.Main) {
+                            isSaving = false
+                            if (uri != null) {
+                                shareImageUri(context, uri)
+                            }
+                        }
+                    }
+                }
+            }) {
+                Icon(Icons.Default.Share, contentDescription = "Share Meme")
+            }
+        }
+
+        // Loader overlay
+        if (isSaving) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
         }
 
         // Text Input Dialog
@@ -190,7 +263,6 @@ fun MemeEditorScreen(viewModel: MemeViewModel = hiltViewModel()) {
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Font Size Slider
                         Text("Font Size: ${fontSize.toInt()}")
                         Slider(
                             value = fontSize,
@@ -200,7 +272,6 @@ fun MemeEditorScreen(viewModel: MemeViewModel = hiltViewModel()) {
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Font Color Picker (predefined)
                         Text("Select Color")
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(
@@ -216,7 +287,7 @@ fun MemeEditorScreen(viewModel: MemeViewModel = hiltViewModel()) {
                                     Color.Gray,
                                     Color.LightGray,
                                     Color.DarkGray,
-                                    Color(0xFFFFA500) // orange
+                                    Color(0xFFFFA500)
                                 )
                             ) { color ->
                                 Box(
@@ -235,7 +306,6 @@ fun MemeEditorScreen(viewModel: MemeViewModel = hiltViewModel()) {
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Style Toggles
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceEvenly
@@ -309,11 +379,16 @@ fun MemeEditorScreen(viewModel: MemeViewModel = hiltViewModel()) {
             )
         }
     }
+
 }
+
+
 
 @Composable
 fun DraggableMemeText(
     memeText: MemeText,
+    imageOffset: Offset,           // Top-left corner of the image in Canvas
+    imageSize: Size,               // Size of the displayed image
     onPositionChange: (Offset) -> Unit
 ) {
     val textMeasurer = rememberTextMeasurer()
@@ -331,13 +406,18 @@ fun DraggableMemeText(
     val textWidth = measuredText.size.width.toFloat()
     val textHeight = measuredText.size.height.toFloat()
 
-    var offset by remember {
-        mutableStateOf(
-            Offset(
-                (memeText.offset.x - textWidth) / 2f,
-                (memeText.offset.y - textHeight) / 2f
-            )
+    // Calculate initial offset, centering the text relative to memeText.offset
+    val initialOffset = remember {
+        Offset(
+            (memeText.offset.x - textWidth) / 2f,
+            (memeText.offset.y - textHeight) / 2f
         )
+    }
+
+    var offset by remember { mutableStateOf(initialOffset) }
+
+    LaunchedEffect(Unit) {
+        onPositionChange(offset)
     }
 
     Box(
@@ -348,9 +428,15 @@ fun DraggableMemeText(
                     change.consume()
                     val newOffset = offset + dragAmount
 
-                    // Clamp horizontal movement
-                    val clampedX = newOffset.x.coerceIn(0f, memeText.offset.x - textWidth)
-                    val clampedY = newOffset.y.coerceIn(0f, memeText.offset.y - textHeight)
+                    // Calculate the boundaries of the image
+                    val minX = imageOffset.x
+                    val minY = imageOffset.y
+                    val maxX = imageOffset.x + imageSize.width
+                    val maxY = imageOffset.y + imageSize.height
+
+                    // Clamp the new offset to the image boundaries
+                    val clampedX = newOffset.x.coerceIn(minX, maxX - textWidth)
+                    val clampedY = newOffset.y.coerceIn(minY, maxY - textHeight)
 
                     offset = Offset(clampedX, clampedY)
                     onPositionChange(offset)

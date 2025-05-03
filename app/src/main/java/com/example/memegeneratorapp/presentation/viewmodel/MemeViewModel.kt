@@ -1,14 +1,17 @@
 package com.example.memegeneratorapp.presentation.viewmodel
 
+import android.graphics.ImageDecoder
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.ViewModel
 import com.example.memegeneratorapp.domain.model.MemeText
 import com.example.memegeneratorapp.domain.usecase.SaveMemeUseCase
+import com.example.memegeneratorapp.presentation.utils.convertToSoftwareBitmap
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
@@ -29,6 +32,7 @@ class MemeViewModel @Inject constructor(private val saveMemeUseCase: SaveMemeUse
         imageBitmap = bitmap
         imageOffset = Offset(0f, 0f)
         imageScale = 1f
+
     }
 
     fun addText(text: MemeText) {

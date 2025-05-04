@@ -46,32 +46,40 @@ fun createMemeBitmap(
                 if (memeText.style?.fontStyle == androidx.compose.ui.text.font.FontStyle.Italic) -0.25f else 0f
             isUnderlineText =
                 memeText.style?.textDecoration == androidx.compose.ui.text.style.TextDecoration.Underline
+            textAlign = when (memeText.alignment) {
+                TextAlign.Left -> Paint.Align.LEFT
+                TextAlign.Center -> Paint.Align.CENTER
+                TextAlign.Right -> Paint.Align.RIGHT
+                else -> Paint.Align.LEFT
+            }
         }
 
         // Convert screen offset to original bitmap space
         val xRaw = (memeText.offset.x - offsetX) / scale
         val yRaw = (memeText.offset.y - offsetY) / scale
 
-        // Measure text bounds
+        // Measure text bounds to get the top of the text
         val textBounds = Rect()
         paint.getTextBounds(memeText.text, 0, memeText.text.length, textBounds)
-        val textWidth = textBounds.width().toFloat()
         val textHeight = textBounds.height().toFloat()
+        val textWidth = textBounds.width().toFloat()
+        val textTop = -textBounds.top.toFloat() // Distance from baseline to the top of the text
+        val textBottom =
+            -textBounds.bottom.toFloat() // Distance from baseline to the top of the text
 
-        // Adjust x based on alignment manually
+        // Calculate the x coordinate based on alignment
         val x = when (memeText.alignment) {
             TextAlign.Left -> xRaw
-            TextAlign.Center -> (xRaw - textWidth / 8f) + 12f
-            TextAlign.Right -> xRaw - textWidth
+            TextAlign.Center -> xRaw + textWidth / 2f
+            TextAlign.Right -> xRaw
             else -> xRaw
         }
 
-        // Y baseline correction
-        val y = yRaw + textHeight
+        // Position the top of the text at yRaw
+        val y = (yRaw + textTop / 2f - textBottom / 2f + textHeight / 2f) - 1.5f
 
         canvas.drawText(memeText.text, x, y, paint)
     }
-
     return bitmap
 }
 

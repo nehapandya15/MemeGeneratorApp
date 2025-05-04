@@ -31,6 +31,7 @@ fun MemeEditorScreen(viewModel: MemeViewModel) {
     }
 
     MemeEditorContent(
+        isImageSelected = viewModel.selectedImageUri!=null,
         imageBitmap = viewModel.imageBitmap,
         memeTexts = viewModel.memeTexts,
         onTextPositionChanged = viewModel::onTextPositionChanged,

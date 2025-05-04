@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 @Composable
 fun MemeEditorContent(
+    isImageSelected: Boolean,
     imageBitmap: ImageBitmap?,
     memeTexts: StateFlow<List<MemeText>>,
     onTextPositionChanged: (Int, Offset) -> Unit,
@@ -63,7 +66,16 @@ fun MemeEditorContent(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier
+        .fillMaxSize()
+        .background(Color.Black)) {
+        if (imageBitmap == null) {
+            Text(modifier = Modifier.align(Alignment.Center),
+                text = "Default meme template.",
+                color = Color.White,
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
         // Draw image
         Canvas(modifier = Modifier.fillMaxSize()) {
             imageBitmap?.let { bitmap ->
@@ -101,7 +113,8 @@ fun MemeEditorContent(
             onSelectImage = onSelectImage,
             onAddText = onShowTextDialog,
             onSave = onSaveClicked,
-            onShare = onShareClicked
+            onShare = onShareClicked,
+            isImageSelected = isImageSelected
         )
 
         // Loading indicator while saving

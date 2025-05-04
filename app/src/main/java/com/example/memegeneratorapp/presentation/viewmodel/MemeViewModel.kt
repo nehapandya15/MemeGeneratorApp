@@ -1,52 +1,112 @@
 package com.example.memegeneratorapp.presentation.viewmodel
 
-import android.graphics.ImageDecoder
+import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.memegeneratorapp.domain.model.MemeText
+import com.example.memegeneratorapp.domain.repository.MemeRepository
 import com.example.memegeneratorapp.domain.usecase.SaveMemeUseCase
-import com.example.memegeneratorapp.presentation.utils.convertToSoftwareBitmap
+import com.example.memegeneratorapp.presentation.utils.createMemeBitmap
+import com.example.memegeneratorapp.presentation.utils.saveBitmapToPictures
+import com.example.memegeneratorapp.presentation.utils.shareImageUri
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
-class MemeViewModel @Inject constructor(private val saveMemeUseCase: SaveMemeUseCase) : ViewModel() {
-
+class MemeViewModel @Inject constructor(
+    private val saveMemeUseCase: SaveMemeUseCase,
+    private val memeRepository: MemeRepository
+) : ViewModel() {
 
     var selectedImageUri by mutableStateOf<Uri?>(null)
     var imageBitmap by mutableStateOf<ImageBitmap?>(null)
+//    var memeTexts by mutableStateOf(listOf<MemeText>())
 
-    var imageScale by mutableStateOf(1f)
-    var imageOffset by mutableStateOf(Offset(0f, 0f))
+    // MutableStateFlows to track UI states
+    private val _isSaving = MutableStateFlow(false)
+    val isSaving: StateFlow<Boolean> get() = _isSaving
 
-    var memeTexts by mutableStateOf(listOf<MemeText>())
+    private val _saveResult = MutableStateFlow<Boolean?>(null) // Nullable for initial empty state
+    val saveResult: StateFlow<Boolean?> get() = _saveResult
+
+    private val _memeTexts = MutableStateFlow<List<MemeText>>(emptyList())
+    val memeTexts: StateFlow<List<MemeText>> get() = _memeTexts
+
+    // Actions to trigger UI changes
+    fun onTextPositionChanged(index: Int, offset: Offset) {
+        _memeTexts.value = _memeTexts.value.toMutableList().apply {
+            this[index] = this[index].copy(offset = offset)
+        }
+    }
+
+    fun addMemeText(newText: MemeText) {
+        _memeTexts.value = _memeTexts.value + newText
+    }
+
+    fun onSaveClicked(context: Context, bitmap: ImageBitmap) {
+        _isSaving.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Create the meme bitmap with the text overlays
+                val memeBitmap = createMemeBitmap(bitmap, _memeTexts.value, context)
+
+                // Save the meme image to storage
+                val uri = saveBitmapToPictures(context, memeBitmap)
+                withContext(Dispatchers.Main) {
+                    _saveResult.value = uri != null
+                }
+            } catch (e: Exception) {
+                // In case of failure, handle gracefully
+                withContext(Dispatchers.Main) {
+                    _saveResult.value = false
+                }
+            } finally {
+                _isSaving.value = false
+            }
+        }
+    }
+
+    fun onShareClicked(context: Context, bitmap: ImageBitmap) {
+        _isSaving.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Create the meme bitmap with the text overlays
+                val memeBitmap = createMemeBitmap(bitmap, _memeTexts.value, context)
+
+                // Save the meme image to storage
+                val uri = saveBitmapToPictures(context, memeBitmap)
+                withContext(Dispatchers.Main) {
+                    if (uri != null) {
+                        shareImageUri(context, uri)
+                    }
+                }
+            } catch (e: Exception) {
+                // Handle error
+            } finally {
+                _isSaving.value = false
+            }
+        }
+    }
+
+    fun resetSaveResult() {
+        _saveResult.value = null
+    }
 
     fun onImageSelected(uri: Uri, bitmap: ImageBitmap) {
         selectedImageUri = uri
         imageBitmap = bitmap
-        imageOffset = Offset(0f, 0f)
-        imageScale = 1f
-
     }
 
-    fun addText(text: MemeText) {
-        memeTexts = memeTexts + text
-    }
-
-    fun updateText(index: Int, newText: MemeText) {
-        memeTexts = memeTexts.toMutableList().apply { this[index] = newText }
-    }
-
-    fun updateTextPosition(index: Int, newOffset: Offset) {
-        memeTexts = memeTexts.mapIndexed { i, text ->
-            if (i == index) text.copy(offset = newOffset) else text
-        }
-    }
 }
 

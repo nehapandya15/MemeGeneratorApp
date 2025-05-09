@@ -10,7 +10,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.memegeneratorapp.domain.model.MemeText
-import com.example.memegeneratorapp.domain.repository.MemeRepository
 import com.example.memegeneratorapp.domain.usecase.SaveMemeUseCase
 import com.example.memegeneratorapp.presentation.utils.shareImageUri
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -56,7 +55,7 @@ class MemeViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 // Create the meme bitmap with the text overlays
-                val uri = saveMemeUseCase(imageBitmap!!,  _memeTexts.value, context)
+                val uri = saveMemeUseCase(imageBitmap!!, _memeTexts.value, context)
                 withContext(Dispatchers.Main) {
                     _saveResult.value = uri != null
                 }
@@ -76,7 +75,7 @@ class MemeViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 // Create the meme bitmap with the text overlays and share
-                val uri = saveMemeUseCase(imageBitmap!!,  _memeTexts.value, context)
+                val uri = saveMemeUseCase(imageBitmap!!, _memeTexts.value, context)
                 withContext(Dispatchers.Main) {
                     if (uri != null) {
                         shareImageUri(context, uri)

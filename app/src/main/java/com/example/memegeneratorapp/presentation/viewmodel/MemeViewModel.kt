@@ -23,8 +23,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class MemeViewModel @Inject constructor(
-    private val saveMemeUseCase: SaveMemeUseCase,
-    private val memeRepository: MemeRepository
+    private val saveMemeUseCase: SaveMemeUseCase
 ) : ViewModel() {
 
     var selectedImageUri by mutableStateOf<Uri?>(null)

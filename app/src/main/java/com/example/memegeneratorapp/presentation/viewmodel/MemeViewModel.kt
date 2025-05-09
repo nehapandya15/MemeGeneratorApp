@@ -27,7 +27,6 @@ class MemeViewModel @Inject constructor(
 
     var selectedImageUri by mutableStateOf<Uri?>(null)
     var imageBitmap by mutableStateOf<ImageBitmap?>(null)
-//    var memeTexts by mutableStateOf(listOf<MemeText>())
 
     // MutableStateFlows to track UI states
     private val _isSaving = MutableStateFlow(false)

@@ -12,8 +12,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.memegeneratorapp.domain.model.MemeText
 import com.example.memegeneratorapp.domain.repository.MemeRepository
 import com.example.memegeneratorapp.domain.usecase.SaveMemeUseCase
-import com.example.memegeneratorapp.presentation.utils.createMemeBitmap
-import com.example.memegeneratorapp.presentation.utils.saveBitmapToPictures
 import com.example.memegeneratorapp.presentation.utils.shareImageUri
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -59,10 +57,7 @@ class MemeViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 // Create the meme bitmap with the text overlays
-                val memeBitmap = createMemeBitmap(bitmap, _memeTexts.value, context)
-
-                // Save the meme image to storage
-                val uri = saveBitmapToPictures(context, memeBitmap)
+                val uri = saveMemeUseCase(imageBitmap!!,  _memeTexts.value, context)
                 withContext(Dispatchers.Main) {
                     _saveResult.value = uri != null
                 }
@@ -81,11 +76,8 @@ class MemeViewModel @Inject constructor(
         _isSaving.value = true
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Create the meme bitmap with the text overlays
-                val memeBitmap = createMemeBitmap(bitmap, _memeTexts.value, context)
-
-                // Save the meme image to storage
-                val uri = saveBitmapToPictures(context, memeBitmap)
+                // Create the meme bitmap with the text overlays and share
+                val uri = saveMemeUseCase(imageBitmap!!,  _memeTexts.value, context)
                 withContext(Dispatchers.Main) {
                     if (uri != null) {
                         shareImageUri(context, uri)
